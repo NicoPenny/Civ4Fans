@@ -3,106 +3,138 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MY MOD NAME for Civilization IV</title>
-<meta name="description" content="Download MY MOD NAME, a mod for Civilization IV.">
+<title>Civ4Fans</title>
+<meta name="description" content="Civ4Fans: a launcher with lobby chat for Civilization IV, and the Beyond the Game mod.">
 <style>
+  /* Colours taken from the Civ4Fans app (C4F_Main.cpp) */
   :root {
-    --bg: #e8edef;
-    --ink: #14232b;
-    --muted: #4a5c65;
-    --line: #b7c4ca;
-    --accent: #1d5f6b;
-    --btn: #b8892b;
-    --btn-ink: #1a1304;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #172126;
-      --ink: #e6eaea;
-      --muted: #9fb0b8;
-      --line: #33444c;
-      --accent: #7cc3cf;
-      --btn: #d4a64a;
-      --btn-ink: #1a1304;
-    }
+    --bg: #191d24;          /* BG_COLOR */
+    --panel: #2b3039;       /* PANEL_COLOR */
+    --panel-hover: #39404b; /* PANEL_HOVER */
+    --gold: #c49e52;        /* GOLD_COLOR */
+    --gold-light: #ebc570;
+    --gold-dark: #a68446;
+    --title: #ebcf97;
+    --text: #f0f0eb;        /* TEXT_COLOR */
+    --body: #dcd8cd;
+    --muted: #b2a489;
+    --btn: #4b361d;
+    --btn-hover: #5e4423;
+    --btn-border: #dcb15e;
+    --btn-text: #f5e1b9;
   }
   * { box-sizing: border-box; }
+  html { background: var(--bg); }
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: Georgia, "Times New Roman", serif;
-    line-height: 1.65;
+    min-height: 100vh;
+    color: var(--body);
+    font-family: Arial, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    background: radial-gradient(ellipse at top, #262c36 0%, var(--bg) 55%);
   }
-  main { max-width: 38rem; margin: 0 auto; padding: 4rem 1.25rem 3rem; }
-  h1 { font-size: 2.6rem; line-height: 1.1; margin: 0 0 .5rem; letter-spacing: -.01em; }
-  .tagline { font-size: 1.2rem; color: var(--muted); margin: 0 0 2rem; }
-  .download {
+  main { max-width: 44rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+
+  header { text-align: center; margin-bottom: 2.5rem; }
+  h1 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.6rem, 9vw, 3.8rem);
+    line-height: 1.1;
+    font-weight: 700;
+    background: linear-gradient(#ffe191, #be7d23);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 0 #5c3714);
+  }
+  .tagline { margin: .75rem auto 0; max-width: 32rem; color: var(--body); }
+  .rule {
+    position: relative; height: 1px; margin: 1.5rem auto 0; max-width: 20rem;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+  .rule::after {
+    content: ""; position: absolute; left: 50%; top: 50%;
+    width: 9px; height: 9px; background: var(--gold);
+    transform: translate(-50%, -50%) rotate(45deg);
+    box-shadow: 0 0 0 3px var(--bg);
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--gold);
+    border-left-width: 5px;
+    border-radius: 3px;
+    padding: 1.5rem 1.6rem;
+    margin-bottom: 1.25rem;
+  }
+  .panel:hover { background: var(--panel-hover); border-color: var(--gold-light); }
+  h2 {
+    margin: 0 0 .2rem;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.6rem;
+    color: var(--title);
+  }
+  .sub { margin: 0 0 .8rem; color: var(--gold-light); font-weight: 700; }
+  .panel p { margin: 0 0 1rem; max-width: 36rem; }
+  .note { font-size: .9rem; color: var(--muted); margin: .7rem 0 0; }
+  .btn {
     display: inline-block;
     background: var(--btn);
-    color: var(--btn-ink);
-    font-family: system-ui, sans-serif;
-    font-weight: 600;
-    padding: .8rem 1.4rem;
-    border-radius: 4px;
+    color: var(--btn-text);
+    border: 1px solid var(--btn-border);
+    border-radius: 3px;
+    padding: .65rem 1.3rem;
+    font-weight: 700;
     text-decoration: none;
   }
-  .download:hover { filter: brightness(1.08); }
-  .download:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-  .version { font-family: system-ui, sans-serif; font-size: .9rem; color: var(--muted); margin: .6rem 0 0; }
-  section { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
-  h2 { font-size: 1.3rem; margin: 0 0 .5rem; }
-  ol, ul { padding-left: 1.2rem; }
-  a { color: var(--accent); }
-  .status { font-family: system-ui, sans-serif; font-size: .95rem; color: var(--muted); }
-  footer { margin-top: 3rem; font-family: system-ui, sans-serif; font-size: .85rem; color: var(--muted); }
+  .btn:hover { background: var(--btn-hover); color: #fff3d6; }
+  .btn:focus-visible { outline: 3px solid var(--gold-light); outline-offset: 3px; }
+
+  footer { margin-top: 2.5rem; text-align: center; font-size: .9rem; color: var(--muted); }
+  .status { color: var(--gold-dark); margin: 0 0 .4rem; }
 </style>
 </head>
 <body>
 <main>
-  <h1>MY MOD NAME</h1>
-  <p class="tagline">One sentence that says what your mod changes in Civilization IV.</p>
+  <header>
+    <h1>Civ4Fans</h1>
+    <p class="tagline">A launcher with lobby chat for Civilization IV, and home of the Beyond the Game mod.</p>
+    <div class="rule"></div>
+  </header>
 
-  <!-- Replace the link with your GitHub Release download URL (see steps) -->
-  <a class="download" href="https://drive.google.com/file/d/1LG1Y5_4I8MECB2cILaXU_PFwg9J1ocFp/view?usp=drive_link">Download version 2.47</a>
-  <p class="version">Early test release for community testers. Requires Civilization IV (Beyond the Sword).</p>
-
-  <section>
-    <h2>What it does</h2>
-    <ul>
-      <li>First thing the mod does.</li>
-      <li>Second thing the mod does.</li>
-      <li>Third thing the mod does.</li>
-    </ul>
+  <section class="panel">
+    <h2>Civ4Fans</h2>
+    <p class="sub">The launcher app</p>
+    <p>Pick your game version, launch Beyond the Game, Ancient Wars, Beyond the Quality of Life or the original Beyond the Sword, and chat with other players in the Civ4 lobby.</p>
+    <!-- Upload the app (zip or exe) to a GitHub Release, then this link works -->
+    <a class="btn" href="https://github.com/NicoPenny/Civ4fans/releases/latest">Download Civ4Fans</a>
+    <p class="note">Small download. Windows only.</p>
   </section>
 
-  <section>
-    <h2>How to install</h2>
-    <ol>
-      <li>Download the zip file above.</li>
-      <li>Unzip it into your Civ4 Mods folder.</li>
-      <li>Start the game and choose the mod from the Load a Mod menu.</li>
-    </ol>
+  <section class="panel">
+    <h2>Beyond the Game</h2>
+    <p class="sub">The mod</p>
+    <p>Balances for all starting eras and all game formats. A full expansion for Beyond the Sword.</p>
+    <!-- Paste your Google Drive sharing link between the quotes -->
+    <a class="btn" href="https://drive.google.com/file/d/1LG1Y5_4I8MECB2cILaXU_PFwg9J1ocFp/view?usp=drive_link">Download Beyond the Game</a>
+    <p class="note">Large download (about 3 GB). Google Drive shows a virus-scan warning for big files: click Download anyway. Requires Civilization IV: Beyond the Sword.</p>
   </section>
 
-  <section>
-    <h2>Activity</h2>
-    <!-- Phase 1: static text. Later a script will fill this in from your /ping endpoint. -->
+  <footer>
     <p class="status" id="status">No games reported yet.</p>
-  </section>
-
-  <footer>Made by YOUR NAME. Feedback welcome on the community forum.</footer>
+    <p>Made by NicoPenny. Feedback welcome on the community forum.</p>
+  </footer>
 </main>
 
 <script>
-  // Placeholder for phase 1. When the ping endpoint exists, set this to its address.
+  // Phase 1 placeholder. When the ping endpoint exists, put its address here.
   var STATUS_URL = "";
   if (STATUS_URL) {
     fetch(STATUS_URL)
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        document.getElementById("status").textContent =
-          "Last game received: " + d.last_received;
+        document.getElementById("status").textContent = "Last game received: " + d.last_received;
       })
       .catch(function () {});
   }
