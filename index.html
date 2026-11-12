@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MY MOD NAME for Civilization IV</title>
+<meta name="description" content="Download MY MOD NAME, a mod for Civilization IV.">
+<style>
+  :root {
+    --bg: #e8edef;
+    --ink: #14232b;
+    --muted: #4a5c65;
+    --line: #b7c4ca;
+    --accent: #1d5f6b;
+    --btn: #b8892b;
+    --btn-ink: #1a1304;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #172126;
+      --ink: #e6eaea;
+      --muted: #9fb0b8;
+      --line: #33444c;
+      --accent: #7cc3cf;
+      --btn: #d4a64a;
+      --btn-ink: #1a1304;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.65;
+  }
+  main { max-width: 38rem; margin: 0 auto; padding: 4rem 1.25rem 3rem; }
+  h1 { font-size: 2.6rem; line-height: 1.1; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  .tagline { font-size: 1.2rem; color: var(--muted); margin: 0 0 2rem; }
+  .download {
+    display: inline-block;
+    background: var(--btn);
+    color: var(--btn-ink);
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    padding: .8rem 1.4rem;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+  .download:hover { filter: brightness(1.08); }
+  .download:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .version { font-family: system-ui, sans-serif; font-size: .9rem; color: var(--muted); margin: .6rem 0 0; }
+  section { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+  h2 { font-size: 1.3rem; margin: 0 0 .5rem; }
+  ol, ul { padding-left: 1.2rem; }
+  a { color: var(--accent); }
+  .status { font-family: system-ui, sans-serif; font-size: .95rem; color: var(--muted); }
+  footer { margin-top: 3rem; font-family: system-ui, sans-serif; font-size: .85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>MY MOD NAME</h1>
+  <p class="tagline">One sentence that says what your mod changes in Civilization IV.</p>
+
+  <!-- Replace the link with your GitHub Release download URL (see steps) -->
+  <a class="download" href="https://github.com/YOURUSERNAME/civ4mod/releases/latest">Download version 0.1</a>
+  <p class="version">Early test release for community testers. Requires Civilization IV (Beyond the Sword).</p>
+
+  <section>
+    <h2>What it does</h2>
+    <ul>
+      <li>First thing the mod does.</li>
+      <li>Second thing the mod does.</li>
+      <li>Third thing the mod does.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How to install</h2>
+    <ol>
+      <li>Download the zip file above.</li>
+      <li>Unzip it into your Civ4 Mods folder.</li>
+      <li>Start the game and choose the mod from the Load a Mod menu.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Activity</h2>
+    <!-- Phase 1: static text. Later a script will fill this in from your /ping endpoint. -->
+    <p class="status" id="status">No games reported yet.</p>
+  </section>
+
+  <footer>Made by YOUR NAME. Feedback welcome on the community forum.</footer>
+</main>
+
+<script>
+  // Placeholder for phase 1. When the ping endpoint exists, set this to its address.
+  var STATUS_URL = "";
+  if (STATUS_URL) {
+    fetch(STATUS_URL)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        document.getElementById("status").textContent =
+          "Last game received: " + d.last_received;
+      })
+      .catch(function () {});
+  }
+</script>
+</body>
+</html>
