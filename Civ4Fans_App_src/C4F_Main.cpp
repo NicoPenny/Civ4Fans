@@ -5,6 +5,7 @@
 #include <objidl.h>
 #include <cwchar>
 #include <cstring>
+#include <commdlg.h>
 #include "C4F_ChatPanel.h"
 #include "C4F_IRC.h"
 #include <shlobj.h>
@@ -16,9 +17,19 @@
 #pragma comment(lib, "ole32.lib")
 
 #pragma comment(lib, "Shell32.lib")
+#pragma comment(lib, "Comdlg32.lib")
 #pragma comment(lib, "Ole32.lib")
 
 using namespace Gdiplus;
+
+// Defined with the other generated window strings below.
+extern wchar_t g_windowTitle[64];
+
+// ============================================================
+// CHANGE THIS NUMBER FOR EACH CIV4FANS LAUNCHER BUILD
+// ============================================================
+
+#define C4F_BUILD_NUMBER 1481
 
 // ============================================================
 // CHANGE THIS NUMBER ONLY WHEN UPGRADING THE GAME VERSION
@@ -112,7 +123,7 @@ void DrawWindows10CustomTitleBar(HDC hdc, int width)
     SetTextColor(hdc, RGB(245, 211, 143));
     // Align the title with the left edge of the main option panels (x=40).
     RECT title = { 40, 0, width - 96, CUSTOM_TITLEBAR_HEIGHT - 1 };
-    DrawText(hdc, L"Civ4Fans", -1, &title, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DrawText(hdc, g_windowTitle, -1, &title, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     SelectObject(hdc, oldFont);
     DeleteObject(font);
 
@@ -653,6 +664,14 @@ static BOOL BuildGamePath(
     wchar_t* path,
     size_t pathSize);
 
+static int ResolveExecutableInFolder(
+    const wchar_t* root,
+    const wchar_t* folder,
+    const wchar_t* requestedExe,
+    BOOL largeIcon,
+    wchar_t* resolvedExe,
+    size_t exeSize);
+
 static BOOL BrowseForGameRoot(HWND owner, wchar_t* selectedPath,
                               size_t pathSize)
 {
@@ -734,6 +753,8 @@ static BOOL BuildSelectedInstallGamePath(
     const wchar_t* root,
     const wchar_t* folder,
     const wchar_t* exe,
+    wchar_t* resolvedExe,
+    size_t exeSize,
     wchar_t* path,
     size_t pathSize)
 {
@@ -758,7 +779,20 @@ static BOOL BuildSelectedInstallGamePath(
         selectedVersionFolder, gameSubfolder) < 0)
         return FALSE;
 
-    return BuildGamePath(root, selectedFolder, exe, path, pathSize);
+    int resolveResult = ResolveExecutableInFolder(
+        root, selectedFolder, exe, g_largeIconChecked,
+        resolvedExe, exeSize);
+
+    if (resolveResult < 0)
+        return FALSE; // The user cancelled an ambiguous selection.
+
+    if (resolveResult == 0)
+    {
+        if (wcscpy_s(resolvedExe, exeSize, exe) != 0)
+            return FALSE;
+    }
+
+    return BuildGamePath(root, selectedFolder, resolvedExe, path, pathSize);
 }
 
 
@@ -860,25 +894,23 @@ static BOOL FindOlderGameVersion(
 
         wchar_t candidateFolder[MAX_PATH];
         wchar_t candidateExe[MAX_PATH];
-        wchar_t candidatePath[MAX_PATH];
-        //wchar_t compactVersion[16];
 
         swprintf_s(candidateFolder, MAX_PATH,
             L"%s%s", data.cFileName, relativeFolder);
 
-		// Executable names are now independent of the game version.
-		wcscpy_s(candidateExe, MAX_PATH, exe);
+        // Older releases may use a different executable filename. Resolve
+        // the closest matching executable inside this version's game folder.
+        int resolveResult = ResolveExecutableInFolder(
+            g_gameRootPath, candidateFolder, exe,
+            g_largeIconChecked, candidateExe, MAX_PATH);
 
-        swprintf_s(candidatePath, MAX_PATH,
-            L"%s\\%s%s",
-            g_gameRootPath,
-            candidateFolder,
-            candidateExe);
+        if (resolveResult < 0)
+        {
+            FindClose(handle);
+            return FALSE;
+        }
 
-        DWORD attributes = GetFileAttributesW(candidatePath);
-
-        if (attributes != INVALID_FILE_ATTRIBUTES &&
-            !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+        if (resolveResult == 1)
         {
             bestNumber = versionNumber;
 
@@ -936,6 +968,245 @@ static BOOL BuildGamePath(
         return FALSE;
 
     return TRUE;
+}
+
+// Remove the extension, a trailing Large/LargeIcon marker, punctuation and
+// digits. This allows old names with embedded game-version numbers to match.
+static void NormalizeExecutableName(
+    const wchar_t* fileName,
+    wchar_t* normalized,
+    size_t normalizedSize)
+{
+    wchar_t stem[MAX_PATH] = L"";
+    if (wcscpy_s(stem, MAX_PATH, fileName) != 0)
+    {
+        normalized[0] = L'\0';
+        return;
+    }
+
+    wchar_t* extension = wcsrchr(stem, L'.');
+    if (extension && _wcsicmp(extension, L".exe") == 0)
+        *extension = L'\0';
+
+    size_t out = 0;
+    for (const wchar_t* p = stem; *p && out + 1 < normalizedSize; ++p)
+    {
+        // The icon marker is a display/build variant, not part of the game name.
+        if (_wcsnicmp(p, L"LargeIcon", 9) == 0)
+        {
+            p += 8;
+            continue;
+        }
+
+        if (_wcsnicmp(p, L"Large", 5) == 0)
+        {
+            p += 4;
+            continue;
+        }
+
+        wchar_t ch = *p;
+        if (ch >= L'A' && ch <= L'Z')
+            ch = (wchar_t)(ch - L'A' + L'a');
+
+        // Keep letters only: version numbers and separators are ignored.
+        if (ch >= L'a' && ch <= L'z')
+            normalized[out++] = ch;
+    }
+
+    normalized[out] = L'\0';
+}
+
+static int ExecutableNameDistance(
+    const wchar_t* expectedExe,
+    const wchar_t* candidateExe)
+{
+    wchar_t expected[MAX_PATH] = L"";
+    wchar_t candidate[MAX_PATH] = L"";
+
+    NormalizeExecutableName(expectedExe, expected, MAX_PATH);
+    NormalizeExecutableName(candidateExe, candidate, MAX_PATH);
+
+    size_t expectedLength = wcslen(expected);
+    size_t candidateLength = wcslen(candidate);
+
+    if (expectedLength == 0 || candidateLength == 0)
+        return 1000;
+
+    int previous[MAX_PATH];
+    int current[MAX_PATH];
+
+    for (size_t j = 0; j <= candidateLength; ++j)
+        previous[j] = (int)j;
+
+    for (size_t i = 1; i <= expectedLength; ++i)
+    {
+        current[0] = (int)i;
+
+        for (size_t j = 1; j <= candidateLength; ++j)
+        {
+            int substitutionCost =
+                expected[i - 1] == candidate[j - 1] ? 0 : 1;
+
+            int deletion = previous[j] + 1;
+            int insertion = current[j - 1] + 1;
+            int substitution = previous[j - 1] + substitutionCost;
+
+            int best = deletion;
+            if (insertion < best) best = insertion;
+            if (substitution < best) best = substitution;
+
+            current[j] = best;
+        }
+
+        for (size_t j = 0; j <= candidateLength; ++j)
+            previous[j] = current[j];
+    }
+
+    return previous[candidateLength];
+}
+
+static BOOL IsLargeIconExecutable(const wchar_t* fileName)
+{
+    for (const wchar_t* p = fileName; *p; ++p)
+    {
+        if (_wcsnicmp(p, L"Large", 5) == 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+// Return values: 1 = executable resolved, 0 = no resolution (continue the
+// existing missing-folder/file recovery), -1 = user cancelled an ambiguous pick.
+static int ResolveExecutableInFolder(
+    const wchar_t* root,
+    const wchar_t* folder,
+    const wchar_t* requestedExe,
+    BOOL largeIcon,
+    wchar_t* resolvedExe,
+    size_t exeSize)
+{
+    if (!root || !folder || !requestedExe ||
+        !resolvedExe || exeSize == 0)
+        return 0;
+
+    wchar_t folderPath[MAX_PATH] = L"";
+    if (!BuildGamePath(root, folder, L"", folderPath, MAX_PATH))
+        return 0;
+
+    DWORD folderAttributes = GetFileAttributesW(folderPath);
+    if (folderAttributes == INVALID_FILE_ATTRIBUTES ||
+        (folderAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        return 0; // Folder missing: leave the existing recovery logic alone.
+
+    wchar_t exactPath[MAX_PATH] = L"";
+    if (!BuildGamePath(root, folder, requestedExe, exactPath, MAX_PATH))
+        return 0;
+
+    DWORD exactAttributes = GetFileAttributesW(exactPath);
+    if (exactAttributes != INVALID_FILE_ATTRIBUTES &&
+        (exactAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+    {
+        return wcscpy_s(resolvedExe, exeSize, requestedExe) == 0 ? 1 : 0;
+    }
+
+    wchar_t expectedStem[MAX_PATH] = L"";
+    NormalizeExecutableName(requestedExe, expectedStem, MAX_PATH);
+    if (!expectedStem[0])
+        return 0;
+
+    wchar_t searchPath[MAX_PATH] = L"";
+    if (swprintf_s(searchPath, MAX_PATH, L"%s*.exe", folderPath) < 0)
+        return 0;
+
+    WIN32_FIND_DATAW data;
+    HANDLE findHandle = FindFirstFileW(searchPath, &data);
+    if (findHandle == INVALID_HANDLE_VALUE)
+        return 0;
+
+    const int MAX_NAME_DISTANCE = 3;
+    int bestDistance = 1000;
+    int bestCount = 0;
+    wchar_t bestName[MAX_PATH] = L"";
+
+    do
+    {
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            continue;
+
+        const wchar_t* extension = wcsrchr(data.cFileName, L'.');
+        if (!extension || _wcsicmp(extension, L".exe") != 0)
+            continue;
+
+        BOOL candidateIsLarge = IsLargeIconExecutable(data.cFileName);
+        if (largeIcon && !candidateIsLarge)
+            continue;
+        if (!largeIcon && candidateIsLarge)
+            continue;
+
+        int distance = ExecutableNameDistance(
+            requestedExe, data.cFileName);
+
+        if (distance > MAX_NAME_DISTANCE)
+            continue;
+
+        if (distance < bestDistance)
+        {
+            bestDistance = distance;
+            bestCount = 1;
+            wcscpy_s(bestName, MAX_PATH, data.cFileName);
+        }
+        else if (distance == bestDistance)
+        {
+            ++bestCount;
+        }
+    }
+    while (FindNextFileW(findHandle, &data));
+
+    FindClose(findHandle);
+
+    if (bestCount == 0)
+        return 0;
+
+    if (bestCount == 1)
+        return wcscpy_s(resolvedExe, exeSize, bestName) == 0 ? 1 : 0;
+
+    // Several equally close names exist. Let the user choose explicitly.
+    wchar_t selectedPath[MAX_PATH] = L"";
+    OPENFILENAMEW openFile = {};
+    openFile.lStructSize = sizeof(openFile);
+    openFile.hwndOwner = GetActiveWindow();
+    openFile.lpstrFilter = L"Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0";
+    openFile.lpstrFile = selectedPath;
+    openFile.nMaxFile = MAX_PATH;
+    openFile.lpstrInitialDir = folderPath;
+    openFile.lpstrTitle =
+        L"Several possible game executables were found. Select the correct one.";
+    openFile.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+                     OFN_NOCHANGEDIR | OFN_HIDEREADONLY |
+                     OFN_EXPLORER;
+
+    if (!GetOpenFileNameW(&openFile))
+        return -1;
+
+    // Only accept a file in this game's folder, with the requested icon type
+    // and the same best match score that caused the ambiguity prompt.
+    size_t folderLength = wcslen(folderPath);
+    if (_wcsnicmp(selectedPath, folderPath, folderLength) != 0)
+        return -1;
+
+    const wchar_t* selectedName = wcsrchr(selectedPath, L'\\');
+    selectedName = selectedName ? selectedName + 1 : selectedPath;
+
+    BOOL selectedIsLarge = IsLargeIconExecutable(selectedName);
+    if ((largeIcon && !selectedIsLarge) ||
+        (!largeIcon && selectedIsLarge))
+        return -1;
+
+    if (ExecutableNameDistance(requestedExe, selectedName) != bestDistance)
+        return -1;
+
+    return wcscpy_s(resolvedExe, exeSize, selectedName) == 0 ? 1 : -1;
 }
 
 // ============================================================
@@ -1274,12 +1545,14 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 			wchar_t newRoot[MAX_PATH] = L"";
 			wchar_t newPath[MAX_PATH] = L"";
+			wchar_t newExe[MAX_PATH] = L"";
 
 			if (!BrowseForGameRoot(hwnd, newRoot, MAX_PATH))
 				return;
 
 			if (!BuildSelectedInstallGamePath(
-				newRoot, folder, exe, newPath, MAX_PATH))
+				newRoot, folder, exe,
+				newExe, MAX_PATH, newPath, MAX_PATH))
 				return;
 
 			DWORD newAttributes = GetFileAttributesW(newPath);
@@ -1311,10 +1584,11 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 			++selectedVersionFolder;
 
-			swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
-				selectedVersionFolder, folder + wcslen(g_versionFolder));
+            swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
+                selectedVersionFolder, folder + wcslen(g_versionFolder));
 
-			SaveC4FSetting(L"GameRoot", g_gameRootPath);
+            wcscpy_s(selectedExe, MAX_PATH, newExe);
+            SaveC4FSetting(L"GameRoot", g_gameRootPath);
 		}
 		else
 		{
@@ -1323,13 +1597,26 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 		}
 	}
 
-	// Build the executable path from the saved installation root.
-	if (!BuildGamePath(g_gameRootPath, selectedFolder, selectedExe,
-					   path, MAX_PATH))
-		return;
+    // If the game folder exists but its executable has an older/different
+    // filename, resolve the closest matching .exe before entering recovery.
+    wchar_t resolvedExe[MAX_PATH] = L"";
+    int resolveResult = ResolveExecutableInFolder(
+        g_gameRootPath, selectedFolder, selectedExe,
+        g_largeIconChecked, resolvedExe, MAX_PATH);
 
-	// Check whether the selected executable exists.
-	DWORD exeAttributes = GetFileAttributesW(path);
+    if (resolveResult < 0)
+        return; // The user cancelled an ambiguous executable selection.
+
+    if (resolveResult == 1)
+        wcscpy_s(selectedExe, MAX_PATH, resolvedExe);
+
+    // Build the executable path from the saved installation root.
+    if (!BuildGamePath(g_gameRootPath, selectedFolder, selectedExe,
+                       path, MAX_PATH))
+        return;
+
+    // Check whether the selected executable exists.
+    DWORD exeAttributes = GetFileAttributesW(path);
 
 	if (exeAttributes == INVALID_FILE_ATTRIBUTES ||
 		(exeAttributes & FILE_ATTRIBUTE_DIRECTORY))
@@ -1362,15 +1649,17 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 			if (choice == IDYES)
 			{
-				wchar_t newRoot[MAX_PATH] = L"";
-				wchar_t newPath[MAX_PATH] = L"";
+                wchar_t newRoot[MAX_PATH] = L"";
+                wchar_t newPath[MAX_PATH] = L"";
+                wchar_t newExe[MAX_PATH] = L"";
 
-				if (!BrowseForGameRoot(hwnd, newRoot, MAX_PATH))
-					return;
+                if (!BrowseForGameRoot(hwnd, newRoot, MAX_PATH))
+                    return;
 
-				if (!BuildSelectedInstallGamePath(
-					newRoot, folder, exe, newPath, MAX_PATH))
-					return;
+                if (!BuildSelectedInstallGamePath(
+                    newRoot, folder, exe,
+                    newExe, MAX_PATH, newPath, MAX_PATH))
+                    return;
 
 				DWORD newAttributes = GetFileAttributesW(newPath);
 
@@ -1403,14 +1692,11 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 				++selectedVersionFolder;
 
-				swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
-					selectedVersionFolder, folder + wcslen(g_versionFolder));
+                swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
+                    selectedVersionFolder, folder + wcslen(g_versionFolder));
 
-				SaveC4FSetting(L"GameRoot", g_gameRootPath);
-
-				// Use the current launcher version for this launch.
-				wcscpy_s(selectedFolder, MAX_PATH, folder);
-				wcscpy_s(selectedExe, MAX_PATH, exe);
+                wcscpy_s(selectedExe, MAX_PATH, newExe);
+                SaveC4FSetting(L"GameRoot", g_gameRootPath);
 			}
 			else
 			{
@@ -1447,12 +1733,14 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 			wchar_t newRoot[MAX_PATH] = L"";
 			wchar_t newPath[MAX_PATH] = L"";
+			wchar_t newExe[MAX_PATH] = L"";
 
 			if (!BrowseForGameRoot(hwnd, newRoot, MAX_PATH))
 				return;
 
 			if (!BuildSelectedInstallGamePath(
-				newRoot, folder, exe, newPath, MAX_PATH))
+				newRoot, folder, exe,
+				newExe, MAX_PATH, newPath, MAX_PATH))
 				return;
 
 			DWORD newAttributes = GetFileAttributesW(newPath);
@@ -1485,10 +1773,11 @@ void LaunchGame(HWND hwnd, const wchar_t* folder,
 
 			++selectedVersionFolder;
 
-			swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
-				selectedVersionFolder, folder + wcslen(g_versionFolder));
+            swprintf_s(selectedFolder, MAX_PATH, L"%s%s",
+                selectedVersionFolder, folder + wcslen(g_versionFolder));
 
-			SaveC4FSetting(L"GameRoot", g_gameRootPath);
+            wcscpy_s(selectedExe, MAX_PATH, newExe);
+            SaveC4FSetting(L"GameRoot", g_gameRootPath);
 		}
 
 		// Rebuild the path using the selected installation.
@@ -2966,9 +3255,9 @@ int WINAPI wWinMain(
 	}
 
     swprintf_s(
-		g_windowTitle, 64,
-		L"%s",
-		APP_NAME
+        g_windowTitle, _countof(g_windowTitle),
+        L"%s - Build %d",
+        APP_NAME, C4F_BUILD_NUMBER
     );
 
     swprintf_s(
